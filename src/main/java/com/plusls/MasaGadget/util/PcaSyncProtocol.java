@@ -113,149 +113,148 @@ public class PcaSyncProtocol {
     // 反序列化实体数据
     public static void updateEntityHandler(Minecraft client, ClientPacketListener handler,
                                            FriendlyByteBuf buf, PacketSender responseSender) {
-        LocalPlayer player = client.player;
-
-        if (player == null) {
-            return;
-        }
-
-        PlayerCompat playerCompat;
-        LevelCompat levelCompat;
-        Level level;
-
         try {
+            LocalPlayer player = client.player;
+
+            if (player == null) {
+                return;
+            }
+
+            PlayerCompat playerCompat;
+            LevelCompat levelCompat;
+            Level level;
+
+
             playerCompat = PlayerCompat.of(player);
             levelCompat = playerCompat.getLevel();
             level = levelCompat.get();
-        } catch (Exception e) {
-            return;
-        }
 
-        if (!levelCompat.getDimensionLocation().equals(buf.readResourceLocation())) {
-            return;
-        }
 
-        int entityId = buf.readInt();
-        CompoundTag tag = NetworkUtil.readNbt(buf);
-        Entity entity = level.getEntity(entityId);
+            if (!levelCompat.getDimensionLocation().equals(buf.readResourceLocation())) {
+                return;
+            }
 
-        if (entity != null) {
-            SharedConstants.getLogger().debug("update entity!");
-            assert tag != null;
+            int entityId = buf.readInt();
+            CompoundTag tag = NetworkUtil.readNbt(buf);
+            Entity entity = level.getEntity(entityId);
 
-            if (entity instanceof Mob) {
-                if (tag.getBoolean("PersistenceRequired")) {
-                    ((Mob) entity).setPersistenceRequired();
+            if (entity != null) {
+                SharedConstants.getLogger().debug("update entity!");
+                assert tag != null;
+
+                if (entity instanceof Mob) {
+                    if (tag.getBoolean("PersistenceRequired")) {
+                        ((Mob) entity).setPersistenceRequired();
+                    }
                 }
-            }
 
-            if (entity instanceof AbstractMinecartContainer) {
-                NonNullList<ItemStack> itemStacks = ((AccessorAbstractMinecartContainer) entity).getItemStacks();
-                itemStacks.clear();
-                ContainerHelper.loadAllItems(
-                        tag,
-                        itemStacks
-                        //#if MC > 12004
-                        //$$ , client.level.registryAccess()
-                        //#endif
-                );
-            }
-
-            if (entity instanceof AbstractVillager) {
-                ((AbstractVillager) entity).getInventory().clearContent();
-                SimpleContainerCompat.of(((AbstractVillager) entity).getInventory()).fromTag(
-                        tag.getList("Inventory", TagCompat.TAG_COMPOUND)
-                        //#if MC > 12004
-                        //$$ , client.level.registryAccess()
-                        //#endif
-                );
-
-                //#if MC > 12004
-                //$$ if (tag.contains("Offers")) {
-                //$$     MerchantOffers.CODEC
-                //$$             .parse(client.level.registryAccess().createSerializationContext(NbtOps.INSTANCE),
-                //$$                     tag.getCompound("Offers").get("Offers"))
-                //$$             .resultOrPartial(Util.prefix("Failed to load offers: ", MagicLib.getLogger()::warn))
-                //$$             .ifPresent(merchantOffers -> ((AccessorAbstractVillager) entity).setOffers(merchantOffers));
-                //$$ }
-                //#else
-                ((AccessorAbstractVillager) entity).setOffers(new MerchantOffers(tag.getCompound("Offers")));
-                //#endif
-
-                if (entity instanceof Villager) {
-                    ((AccessorVillager) entity).setNumberOfRestocksToday(tag.getInt("RestocksToday"));
-                    ((AccessorVillager) entity).setLastRestockGameTime(tag.getLong("LastRestock"));
-                    ((AccessorLivingEntity) entity).setBrain(((AccessorLivingEntity) entity).invokeMakeBrain(new Dynamic<>(NbtOps.INSTANCE, tag.get("Brain"))));
-                }
-            }
-
-            if (entity instanceof AbstractHorse) {
-                // TODO 写的更优雅一些
-                entity.load(tag);
-            }
-
-            if (entity instanceof Player) {
-                Player playerEntity = (Player) entity;
-                PlayerCompat.of(playerEntity).getInventory().load(tag.getList("Inventory", TagCompat.TAG_COMPOUND));
-
-                if (tag.contains("EnderItems", TagCompat.TAG_LIST)) {
-                    playerEntity.getEnderChestInventory().fromTag(
-                            tag.getList("EnderItems", TagCompat.TAG_COMPOUND)
+                if (entity instanceof AbstractMinecartContainer) {
+                    NonNullList<ItemStack> itemStacks = ((AccessorAbstractMinecartContainer) entity).getItemStacks();
+                    itemStacks.clear();
+                    ContainerHelper.loadAllItems(
+                            tag,
+                            itemStacks
                             //#if MC > 12004
                             //$$ , client.level.registryAccess()
                             //#endif
                     );
                 }
-            }
 
-            if (entity instanceof ZombieVillager) {
-                if (tag.contains("ConversionTime", 99) && tag.getInt("ConversionTime") > -1) {
-                    ((AccessorZombieVillager) entity).invokeStartConverting(tag.hasUUID("ConversionPlayer") ? tag.getUUID("ConversionPlayer") : null, tag.getInt("ConversionTime"));
+                if (entity instanceof AbstractVillager) {
+                    ((AbstractVillager) entity).getInventory().clearContent();
+                    SimpleContainerCompat.of(((AbstractVillager) entity).getInventory()).fromTag(
+                            tag.getList("Inventory", TagCompat.TAG_COMPOUND)
+                            //#if MC > 12004
+                            //$$ , client.level.registryAccess()
+                            //#endif
+                    );
+
+                    //#if MC > 12004
+                    //$$ if (tag.contains("Offers")) {
+                    //$$     MerchantOffers.CODEC
+                    //$$             .parse(client.level.registryAccess().createSerializationContext(NbtOps.INSTANCE),
+                    //$$                     tag.getCompound("Offers").get("Offers"))
+                    //$$             .resultOrPartial(Util.prefix("Failed to load offers: ", MagicLib.getLogger()::warn))
+                    //$$             .ifPresent(merchantOffers -> ((AccessorAbstractVillager) entity).setOffers(merchantOffers));
+                    //$$ }
+                    //#else
+                    ((AccessorAbstractVillager) entity).setOffers(new MerchantOffers(tag.getCompound("Offers")));
+                    //#endif
+
+                    if (entity instanceof Villager) {
+                        ((AccessorVillager) entity).setNumberOfRestocksToday(tag.getInt("RestocksToday"));
+                        ((AccessorVillager) entity).setLastRestockGameTime(tag.getLong("LastRestock"));
+                        ((AccessorLivingEntity) entity).setBrain(((AccessorLivingEntity) entity).invokeMakeBrain(new Dynamic<>(NbtOps.INSTANCE, tag.get("Brain"))));
+                    }
+                }
+
+                if (entity instanceof AbstractHorse) {
+                    // TODO 写的更优雅一些
+                    entity.load(tag);
+                }
+
+                if (entity instanceof Player) {
+                    Player playerEntity = (Player) entity;
+                    PlayerCompat.of(playerEntity).getInventory().load(tag.getList("Inventory", TagCompat.TAG_COMPOUND));
+
+                    if (tag.contains("EnderItems", TagCompat.TAG_LIST)) {
+                        playerEntity.getEnderChestInventory().fromTag(
+                                tag.getList("EnderItems", TagCompat.TAG_COMPOUND)
+                                //#if MC > 12004
+                                //$$ , client.level.registryAccess()
+                                //#endif
+                        );
+                    }
+                }
+
+                if (entity instanceof ZombieVillager) {
+                    if (tag.contains("ConversionTime", 99) && tag.getInt("ConversionTime") > -1) {
+                        ((AccessorZombieVillager) entity).invokeStartConverting(tag.hasUUID("ConversionPlayer") ? tag.getUUID("ConversionPlayer") : null, tag.getInt("ConversionTime"));
+                    }
                 }
             }
+        } catch (Exception e) {
         }
     }
 
     // 反序列化 blockEntity 数据
     public static void updateBlockEntityHandler(Minecraft client, ClientPacketListener handler,
                                                 FriendlyByteBuf buf, PacketSender responseSender) {
-        LocalPlayer player = client.player;
-
-        if (player == null) {
-            return;
-        }
-
-        LevelCompat levelCompat;
-        Level level;
-
         try {
-            levelCompat = PlayerCompat.of(player).getLevel();
-            level = levelCompat.get();
+            LocalPlayer player = client.player;
+
+            if (player == null) {
+                return;
+            }
+
+
+            LevelCompat levelCompat = PlayerCompat.of(player).getLevel();
+            Level level = levelCompat.get();
+
+            if (!levelCompat.getDimensionLocation().equals(buf.readResourceLocation())) {
+                return;
+            }
+
+            BlockPos pos = buf.readBlockPos();
+            CompoundTag tag = buf.readNbt();
+            BlockEntity blockEntity = level.getBlockEntity(pos);
+
+            if (Configs.saveInventoryToSchematicInServer.getBooleanValue() && pos.equals(PcaSyncUtil.lastUpdatePos)) {
+                InfoUtils.showGuiOrInGameMessage(Message.MessageType.SUCCESS, SharedConstants.getModIdentifier() + ".message.loadInventoryToLocalSuccess");
+                PcaSyncUtil.lastUpdatePos = null;
+            }
+
+            if (blockEntity != null) {
+                SharedConstants.getLogger().debug("update blockEntity!");
+                BlockEntityCompat.of(blockEntity).load(
+                        Objects.requireNonNull(tag)
+                        //#if MC > 12004
+                        //$$ , client.level.registryAccess()
+                        //#endif
+                );
+            }
+
         } catch (Exception e) {
-            return;
-        }
-
-        if (!levelCompat.getDimensionLocation().equals(buf.readResourceLocation())) {
-            return;
-        }
-
-        BlockPos pos = buf.readBlockPos();
-        CompoundTag tag = buf.readNbt();
-        BlockEntity blockEntity = level.getBlockEntity(pos);
-
-        if (Configs.saveInventoryToSchematicInServer.getBooleanValue() && pos.equals(PcaSyncUtil.lastUpdatePos)) {
-            InfoUtils.showGuiOrInGameMessage(Message.MessageType.SUCCESS, SharedConstants.getModIdentifier() + ".message.loadInventoryToLocalSuccess");
-            PcaSyncUtil.lastUpdatePos = null;
-        }
-
-        if (blockEntity != null) {
-            SharedConstants.getLogger().debug("update blockEntity!");
-            BlockEntityCompat.of(blockEntity).load(
-                    Objects.requireNonNull(tag)
-                    //#if MC > 12004
-                    //$$ , client.level.registryAccess()
-                    //#endif
-            );
         }
     }
 
