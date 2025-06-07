@@ -113,17 +113,23 @@ public class PcaSyncProtocol {
     // 反序列化实体数据
     public static void updateEntityHandler(Minecraft client, ClientPacketListener handler,
                                            FriendlyByteBuf buf, PacketSender responseSender) {
+
+        LocalPlayer player = null;
+
+        PlayerCompat playerCompat = null;
+        LevelCompat levelCompat = null;
+        Level level = null;
+
+        int entityId = -1;
+        CompoundTag tag = null;
+        Entity entity = null;
+
         try {
-            LocalPlayer player = client.player;
+            player = client.player;
 
             if (player == null) {
                 return;
             }
-
-            PlayerCompat playerCompat;
-            LevelCompat levelCompat;
-            Level level;
-
 
             playerCompat = PlayerCompat.of(player);
             levelCompat = playerCompat.getLevel();
@@ -134,9 +140,9 @@ public class PcaSyncProtocol {
                 return;
             }
 
-            int entityId = buf.readInt();
-            CompoundTag tag = NetworkUtil.readNbt(buf);
-            Entity entity = level.getEntity(entityId);
+            entityId = buf.readInt();
+            tag = NetworkUtil.readNbt(buf);
+            entity = level.getEntity(entityId);
 
             if (entity != null) {
                 SharedConstants.getLogger().debug("update entity!");
@@ -214,30 +220,39 @@ public class PcaSyncProtocol {
                 }
             }
         } catch (Exception e) {
+            return;
         }
     }
 
     // 反序列化 blockEntity 数据
     public static void updateBlockEntityHandler(Minecraft client, ClientPacketListener handler,
                                                 FriendlyByteBuf buf, PacketSender responseSender) {
+        LocalPlayer player = null;
+
+        LevelCompat levelCompat = null;
+        Level level = null;
+
+        BlockPos pos = null;
+        CompoundTag tag = null;
+        BlockEntity blockEntity = null;
+
         try {
-            LocalPlayer player = client.player;
+            player = client.player;
 
             if (player == null) {
                 return;
             }
 
-
-            LevelCompat levelCompat = PlayerCompat.of(player).getLevel();
-            Level level = levelCompat.get();
+            levelCompat = PlayerCompat.of(player).getLevel();
+            level = levelCompat.get();
 
             if (!levelCompat.getDimensionLocation().equals(buf.readResourceLocation())) {
                 return;
             }
 
-            BlockPos pos = buf.readBlockPos();
-            CompoundTag tag = buf.readNbt();
-            BlockEntity blockEntity = level.getBlockEntity(pos);
+            pos = buf.readBlockPos();
+            tag = buf.readNbt();
+            blockEntity = level.getBlockEntity(pos);
 
             if (Configs.saveInventoryToSchematicInServer.getBooleanValue() && pos.equals(PcaSyncUtil.lastUpdatePos)) {
                 InfoUtils.showGuiOrInGameMessage(Message.MessageType.SUCCESS, SharedConstants.getModIdentifier() + ".message.loadInventoryToLocalSuccess");
@@ -255,6 +270,7 @@ public class PcaSyncProtocol {
             }
 
         } catch (Exception e) {
+            return;
         }
     }
 
