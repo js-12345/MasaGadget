@@ -8,9 +8,12 @@ import com.plusls.MasaGadget.util.SyncUtil;
 import fi.dy.masa.malilib.util.Color4f;
 import lombok.Getter;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.ApiStatus;
 import top.hendrixshen.magiclib.MagicLib;
@@ -19,9 +22,14 @@ import top.hendrixshen.magiclib.api.event.minecraft.render.RenderLevelListener;
 import top.hendrixshen.magiclib.api.render.context.RenderContext;
 import top.hendrixshen.magiclib.impl.render.context.RenderGlobal;
 
+import java.util.List;
 import java.util.Queue;
+import java.util.stream.Collectors;
 
 public class EntityTraceRenderer implements RenderEntityListener, RenderLevelListener {
+
+    private static final int VILLAGER_SEARCH_DIST = 2048;
+
     @Getter
     private static final EntityTraceRenderer instance = new EntityTraceRenderer();
     private final Queue<Entity> queue = Queues.newConcurrentLinkedQueue();
@@ -53,7 +61,13 @@ public class EntityTraceRenderer implements RenderEntityListener, RenderLevelLis
 
     @Override
     public void postRenderLevel(Level level, RenderContext renderContext, float partialTicks) {
+        //#if MC == 12004
+        //$$Player player = level.players().stream().filter(Player::isLocalPlayer).collect(Collectors.toList()).get(0);
+        //$$List<Villager> villagers = level.getEntities(EntityType.VILLAGER, AABB.ofSize(player.getPosition(1), VILLAGER_SEARCH_DIST, VILLAGER_SEARCH_DIST, VILLAGER_SEARCH_DIST), villager -> true);
+        //$$for (Entity entity : villagers) {
+        //#else
         for (Entity entity : this.queue) {
+        //#endif
             if (entity instanceof Villager) {
                 Villager villager = MiscUtil.cast(SyncUtil.syncEntityDataFromIntegratedServer(entity));
 
