@@ -151,206 +151,239 @@ public class PcaSyncProtocol {
     }
 
     private static void updateEntityHandler(FriendlyByteBuf buf, ClientboundPacketHandler.Context context) {
-        Minecraft mc = context.getClient();
-        LocalPlayer player = mc.player;
+        // extracting vars outside of try catch to be compatible for further mixin, e.g. techutils
+        final Minecraft mc;
+        final LocalPlayer player;
 
-        if (player == null) {
-            return;
-        }
+        final PlayerCompat playerCompat;
+        final LevelCompat levelCompat;
+        final Level level;
 
-        PlayerCompat playerCompat = PlayerCompat.of(player);
-        LevelCompat levelCompat = playerCompat.getLevelCompat();
-        Level level = levelCompat.get();
+        final int entityId;
+        final CompoundTag tag;
+        final Entity entity;
 
-        if (!levelCompat.getDimensionLocation().equals(buf.readResourceLocation())) {
-            return;
-        }
+        // in past was cause of crashes, not sure why, just big try catch
+        try {
+            mc = context.getClient();
+            player = mc.player;
 
-        int entityId = buf.readInt();
-        CompoundTag tag = NetworkUtil.readNbtAuto(buf);
-        Entity entity = level.getEntity(entityId);
-
-        if (entity != null) {
-            SharedConstants.getLogger().debug("update entity!");
-
-            //#if MC >= 12106
-            //$$ ValueInput input;
-            //$$
-            //$$ try (ProblemReporter.ScopedCollector collector = new ProblemReporter.ScopedCollector(entity.problemPath(), PcaSyncProtocol.LOGGER)) {
-            //$$     input = TagValueInput.create(collector, entity.registryAccess(), tag);
-            //$$ }
-            //#endif
-
-            if (entity instanceof Mob) {
-                if (
-                    //#if MC > 12104
-                    //$$ tag.getBoolean("PersistenceRequired").orElse(false)
-                    //#else
-                        tag.getBoolean("PersistenceRequired")
-                    //#endif
-                ) {
-                    ((Mob) entity).setPersistenceRequired();
-                }
+            if (player == null) {
+                return;
             }
 
-            if (entity instanceof AbstractMinecartContainer) {
-                NonNullList<ItemStack> itemStacks = ((AccessorAbstractMinecartContainer) entity).masa_gadget_mod$getItemStacks();
-                itemStacks.clear();
-                ContainerHelper.loadAllItems(
-                        //#if MC >= 12106
-                        //$$ input,
-                        //#else
-                        tag,
-                        //#endif
-                        itemStacks
-                        //#if 12106 >= MC && MC > 12004
-                        //$$ , mc.level.registryAccess()
-                        //#endif
-                );
+            playerCompat = PlayerCompat.of(player);
+            levelCompat = playerCompat.getLevelCompat();
+            level = levelCompat.get();
+
+            if (!levelCompat.getDimensionLocation().equals(buf.readResourceLocation())) {
+                return;
             }
 
-            if (entity instanceof AbstractVillager) {
-                ((AbstractVillager) entity).getInventory().clearContent();
+            entityId = buf.readInt();
+            tag = NetworkUtil.readNbtAuto(buf);
+            entity = level.getEntity(entityId);
+
+            if (entity != null) {
+                SharedConstants.getLogger().debug("update entity!");
+
                 //#if MC >= 12106
-                //$$ input.list("Inventory", ItemStack.CODEC).ifPresent(itemStacks ->
-                //$$         SimpleContainerCompat.of(((AbstractVillager) entity).getInventory()).fromTag(itemStacks));
-                //$$ ((AccessorAbstractVillager) entity).masa_gadget_mod$setOffers(input.read("Offers", MerchantOffers.CODEC).orElse(null));
-                //#else
-                SimpleContainerCompat.of(((AbstractVillager) entity).getInventory()).fromTag(
-                        //#if MC > 12104
-                        //$$ tag.getListOrEmpty("Inventory")
-                        //#else
-                        tag.getList("Inventory", TagCompat.TAG_COMPOUND)
-                        //#endif
-                        //#if MC > 12004
-                        //$$ , mc.level.registryAccess()
-                        //#endif
-                );
-
-                //#if MC > 12004
-                //$$ if (tag.contains("Offers")) {
-                //$$     MerchantOffers.CODEC
-                //$$             .parse(mc.level.registryAccess().createSerializationContext(NbtOps.INSTANCE),
-                //$$                     tag.get("Offers"))
-                //$$             .resultOrPartial(Util.prefix("Failed to load offers: ", MagicLib.getLogger()::warn))
-                //$$             .ifPresent(merchantOffers -> ((AccessorAbstractVillager) entity).masa_gadget_mod$setOffers(merchantOffers));
+                //$$ ValueInput input;
+                //$$
+                //$$ try (ProblemReporter.ScopedCollector collector = new ProblemReporter.ScopedCollector(entity.problemPath(), PcaSyncProtocol.LOGGER)) {
+                //$$     input = TagValueInput.create(collector, entity.registryAccess(), tag);
                 //$$ }
-                //#else
-                ((AccessorAbstractVillager) entity).masa_gadget_mod$setOffers(new MerchantOffers(tag.getCompound("Offers")));
-                //#endif
                 //#endif
 
-                if (entity instanceof Villager) {
-                    ((AccessorVillager) entity).masa_gadget_mod$setNumberOfRestocksToday(
-                            //#if MC > 12104
-                            //$$ tag.getIntOr("RestocksToday", 0)
-                            //#else
-                            tag.getInt("RestocksToday")
-                            //#endif
-                    );
-                    ((AccessorVillager) entity).masa_gadget_mod$setLastRestockGameTime(
-                            //#if MC > 12104
-                            //$$ tag.getLongOr("RestocksToday", 0L)
-                            //#else
-                            tag.getLong("LastRestock")
-                            //#endif
-                    );
-                    ((AccessorLivingEntity) entity).masa_gadget_mod$setBrain(((AccessorLivingEntity) entity).masa_gadget_mod$makeBrain(new Dynamic<>(NbtOps.INSTANCE, tag.get("Brain"))));
-                }
-            }
-
-            if (entity instanceof AbstractHorse) {
-                // TODO 写的更优雅一些
-                entity.load(
-                        //#if MC >= 12106
-                        //$$ input
-                        //#else
-                        tag
-                        //#endif
-                );
-            }
-
-            if (entity instanceof Player) {
-                Player playerEntity = (Player) entity;
-                //#if MC >= 12106
-                //$$ PlayerCompat.of(playerEntity).getInventory().load(input.listOrEmpty("Inventory", ItemStackWithSlot.CODEC));
-                //$$ playerEntity.getEnderChestInventory().fromSlots(input.listOrEmpty("EnderItems", ItemStackWithSlot.CODEC));
-                //#else
-                PlayerCompat.of(playerEntity).getInventory().load(
+                if (entity instanceof Mob) {
+                    if (
                         //#if MC > 12104
-                        //$$ tag.getListOrEmpty("Inventory")
+                        //$$ tag.getBoolean("PersistenceRequired").orElse(false)
                         //#else
-                        tag.getList("Inventory", TagCompat.TAG_COMPOUND)
+                            tag.getBoolean("PersistenceRequired")
                         //#endif
-                );
+                    ) {
+                        ((Mob) entity).setPersistenceRequired();
+                    }
+                }
 
-                //#if MC > 12104
-                //$$ tag.getList("EnderItems").ifPresent(tags ->
-                //$$         playerEntity.getEnderChestInventory().fromTag(tags, mc.level.registryAccess())
-                //$$ );
-                //#else
-                if (tag.contains("EnderItems", TagCompat.TAG_LIST)) {
-                    playerEntity.getEnderChestInventory().fromTag(
-                            tag.getList("EnderItems", TagCompat.TAG_COMPOUND)
-                            //#if MC > 12004
+                if (entity instanceof AbstractMinecartContainer) {
+                    NonNullList<ItemStack> itemStacks = ((AccessorAbstractMinecartContainer) entity).masa_gadget_mod$getItemStacks();
+                    itemStacks.clear();
+                    ContainerHelper.loadAllItems(
+                            //#if MC >= 12106
+                            //$$ input,
+                            //#else
+                            tag,
+                            //#endif
+                            itemStacks
+                            //#if 12106 >= MC && MC > 12004
                             //$$ , mc.level.registryAccess()
                             //#endif
                     );
                 }
-                //#endif
-                //#endif
-            }
 
-            if (entity instanceof ZombieVillager) {
-                //#if MC > 12104
-                //$$ int conversionTime = tag.getIntOr("ConversionTime", -1);
-                //$$
-                //$$ if (conversionTime > -1) {
-                //$$     tag.read("ConversionPlayer", UUIDUtil.CODEC).ifPresent(uuid ->
-                //$$         ((AccessorZombieVillager) entity).masa_gadget_mod$startConverting(uuid, conversionTime)
-                //$$     );
-                //$$ }
-                //#else
-                if (tag.contains("ConversionTime", 99) && tag.getInt("ConversionTime") > -1) {
-                    ((AccessorZombieVillager) entity).masa_gadget_mod$startConverting(tag.hasUUID("ConversionPlayer") ? tag.getUUID("ConversionPlayer") : null, tag.getInt("ConversionTime"));
+                if (entity instanceof AbstractVillager) {
+                    ((AbstractVillager) entity).getInventory().clearContent();
+                    //#if MC >= 12106
+                    //$$ input.list("Inventory", ItemStack.CODEC).ifPresent(itemStacks ->
+                    //$$         SimpleContainerCompat.of(((AbstractVillager) entity).getInventory()).fromTag(itemStacks));
+                    //$$ ((AccessorAbstractVillager) entity).masa_gadget_mod$setOffers(input.read("Offers", MerchantOffers.CODEC).orElse(null));
+                    //#else
+                    SimpleContainerCompat.of(((AbstractVillager) entity).getInventory()).fromTag(
+                            //#if MC > 12104
+                            //$$ tag.getListOrEmpty("Inventory")
+                            //#else
+                            tag.getList("Inventory", TagCompat.TAG_COMPOUND)
+                            //#endif
+                            //#if MC > 12004
+                            //$$ , mc.level.registryAccess()
+                            //#endif
+                    );
+
+                    //#if MC > 12004
+                    //$$ if (tag.contains("Offers")) {
+                    //$$     MerchantOffers.CODEC
+                    //$$             .parse(mc.level.registryAccess().createSerializationContext(NbtOps.INSTANCE),
+                    //$$                     tag.get("Offers"))
+                    //$$             .resultOrPartial(Util.prefix("Failed to load offers: ", MagicLib.getLogger()::warn))
+                    //$$             .ifPresent(merchantOffers -> ((AccessorAbstractVillager) entity).masa_gadget_mod$setOffers(merchantOffers));
+                    //$$ }
+                    //#else
+                    ((AccessorAbstractVillager) entity).masa_gadget_mod$setOffers(new MerchantOffers(tag.getCompound("Offers")));
+                    //#endif
+                    //#endif
+
+                    if (entity instanceof Villager) {
+                        ((AccessorVillager) entity).masa_gadget_mod$setNumberOfRestocksToday(
+                                //#if MC > 12104
+                                //$$ tag.getIntOr("RestocksToday", 0)
+                                //#else
+                                tag.getInt("RestocksToday")
+                                //#endif
+                        );
+                        ((AccessorVillager) entity).masa_gadget_mod$setLastRestockGameTime(
+                                //#if MC > 12104
+                                //$$ tag.getLongOr("RestocksToday", 0L)
+                                //#else
+                                tag.getLong("LastRestock")
+                                //#endif
+                        );
+                        ((AccessorLivingEntity) entity).masa_gadget_mod$setBrain(((AccessorLivingEntity) entity).masa_gadget_mod$makeBrain(new Dynamic<>(NbtOps.INSTANCE, tag.get("Brain"))));
+                    }
                 }
-                //#endif
+
+                if (entity instanceof AbstractHorse) {
+                    // TODO 写的更优雅一些
+                    entity.load(
+                            //#if MC >= 12106
+                            //$$ input
+                            //#else
+                            tag
+                            //#endif
+                    );
+                }
+
+                if (entity instanceof Player) {
+                    Player playerEntity = (Player) entity;
+                    //#if MC >= 12106
+                    //$$ PlayerCompat.of(playerEntity).getInventory().load(input.listOrEmpty("Inventory", ItemStackWithSlot.CODEC));
+                    //$$ playerEntity.getEnderChestInventory().fromSlots(input.listOrEmpty("EnderItems", ItemStackWithSlot.CODEC));
+                    //#else
+                    PlayerCompat.of(playerEntity).getInventory().load(
+                            //#if MC > 12104
+                            //$$ tag.getListOrEmpty("Inventory")
+                            //#else
+                            tag.getList("Inventory", TagCompat.TAG_COMPOUND)
+                            //#endif
+                    );
+
+                    //#if MC > 12104
+                    //$$ tag.getList("EnderItems").ifPresent(tags ->
+                    //$$         playerEntity.getEnderChestInventory().fromTag(tags, mc.level.registryAccess())
+                    //$$ );
+                    //#else
+                    if (tag.contains("EnderItems", TagCompat.TAG_LIST)) {
+                        playerEntity.getEnderChestInventory().fromTag(
+                                tag.getList("EnderItems", TagCompat.TAG_COMPOUND)
+                                //#if MC > 12004
+                                //$$ , mc.level.registryAccess()
+                                //#endif
+                        );
+                    }
+                    //#endif
+                    //#endif
+                }
+
+                if (entity instanceof ZombieVillager) {
+                    //#if MC > 12104
+                    //$$ int conversionTime = tag.getIntOr("ConversionTime", -1);
+                    //$$
+                    //$$ if (conversionTime > -1) {
+                    //$$     tag.read("ConversionPlayer", UUIDUtil.CODEC).ifPresent(uuid ->
+                    //$$         ((AccessorZombieVillager) entity).masa_gadget_mod$startConverting(uuid, conversionTime)
+                    //$$     );
+                    //$$ }
+                    //#else
+                    if (tag.contains("ConversionTime", 99) && tag.getInt("ConversionTime") > -1) {
+                        ((AccessorZombieVillager) entity).masa_gadget_mod$startConverting(tag.hasUUID("ConversionPlayer") ? tag.getUUID("ConversionPlayer") : null, tag.getInt("ConversionTime"));
+                    }
+                    //#endif
+                }
             }
+        } catch (Exception e) {
+            SharedConstants.getLogger().error("PcaSyncProtocol.updateEntityHandler:", e);
         }
     }
 
     private static void updateBlockEntityHandler(FriendlyByteBuf buf, ClientboundPacketHandler.Context context) {
-        Minecraft mc = context.getClient();
-        LocalPlayer player = mc.player;
+        // extracting vars outside of try catch to be compatible for further mixin, e.g. techutils
+        final Minecraft mc;
+        final LocalPlayer player;
 
-        if (player == null) {
-            return;
-        }
+        final LevelCompat levelCompat;
+        final Level level;
 
-        LevelCompat levelCompat = PlayerCompat.of(player).getLevelCompat();
-        Level level = levelCompat.get();
+        final BlockPos pos;
+        final CompoundTag tag;
+        final BlockEntity blockEntity;
 
-        if (!levelCompat.getDimensionLocation().equals(buf.readResourceLocation())) {
-            return;
-        }
+        // in past was cause of crashes, not sure why, just big try catch
+        try {
+            mc = context.getClient();
+            player = mc.player;
 
-        BlockPos pos = buf.readBlockPos();
-        CompoundTag tag = NetworkUtil.readNbtAuto(buf);
-        BlockEntity blockEntity = level.getBlockEntity(pos);
+            if (player == null) {
+                return;
+            }
 
-        if (Configs.saveInventoryToSchematicInServer.getBooleanValue() && pos.equals(PcaSyncUtil.lastUpdatePos)) {
-            InfoUtils.showGuiOrInGameMessage(Message.MessageType.SUCCESS, SharedConstants.tr("message.loadInventoryToLocalSuccess"));
-            PcaSyncUtil.lastUpdatePos = null;
-        }
+            levelCompat = PlayerCompat.of(player).getLevelCompat();
+            level = levelCompat.get();
 
-        if (blockEntity != null) {
-            SharedConstants.getLogger().debug("update blockEntity!");
-            BlockEntityCompat.of(blockEntity).load(
-                    Objects.requireNonNull(tag)
-                    //#if MC > 12004
-                    //$$ , mc.level.registryAccess()
-                    //#endif
-            );
+            if (!levelCompat.getDimensionLocation().equals(buf.readResourceLocation())) {
+                return;
+            }
+
+            pos = buf.readBlockPos();
+            tag = NetworkUtil.readNbtAuto(buf);
+            blockEntity = level.getBlockEntity(pos);
+
+            if (Configs.saveInventoryToSchematicInServer.getBooleanValue() && pos.equals(PcaSyncUtil.lastUpdatePos)) {
+                InfoUtils.showGuiOrInGameMessage(Message.MessageType.SUCCESS, SharedConstants.tr("message.loadInventoryToLocalSuccess"));
+                PcaSyncUtil.lastUpdatePos = null;
+            }
+
+            if (blockEntity != null) {
+                SharedConstants.getLogger().debug("update blockEntity!");
+                BlockEntityCompat.of(blockEntity).load(
+                        Objects.requireNonNull(tag)
+                        //#if MC > 12004
+                        //$$ , mc.level.registryAccess()
+                        //#endif
+                );
+            }
+        } catch (Exception e) {
+            SharedConstants.getLogger().error("PcaSyncProtocol.updateBlockEntityHandler:", e);
         }
     }
 
