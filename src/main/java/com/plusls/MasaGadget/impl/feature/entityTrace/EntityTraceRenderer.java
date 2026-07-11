@@ -42,10 +42,13 @@ public class EntityTraceRenderer implements RenderEntityListener, RenderLevelLis
 
     @Override
     public void postRenderEntity(Entity entity, EntityRenderContext renderContext) {
-        if (entity instanceof Villager &&
-                Configs.renderVillageHomeTracer.getBooleanValue() ||
+        if (Configs.renderVillageHomeTracer.getBooleanValue() ||
                 Configs.renderVillageJobSiteTracer.getBooleanValue()) {
-            this.queue.add(entity);
+            if (entity instanceof Villager && !queue.contains(entity)) {
+                this.queue.add(entity);
+            }
+        } else {
+            this.queue.clear();
         }
     }
 
@@ -89,7 +92,5 @@ public class EntityTraceRenderer implements RenderEntityListener, RenderLevelLis
                 }
             }
         }
-
-        this.queue.clear();
     }
 }
