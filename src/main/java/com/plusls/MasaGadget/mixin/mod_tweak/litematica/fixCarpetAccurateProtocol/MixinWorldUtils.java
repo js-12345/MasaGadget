@@ -114,7 +114,11 @@ public class MixinWorldUtils {
             method = "doEasyPlaceAction",
             at = @At(
                     value = "INVOKE",
+                    //#if MC >= 12108
+                    //$$ target = "Lfi/dy/masa/litematica/util/EasyPlaceUtils;cacheEasyPlacePosition(Lnet/minecraft/core/BlockPos;)V",
+                    //#else
                     target = "Lfi/dy/masa/litematica/util/WorldUtils;cacheEasyPlacePosition(Lnet/minecraft/core/BlockPos;)V",
+                    //#endif
                     remap = true
             ),
             locals = LocalCapture.CAPTURE_FAILHARD
